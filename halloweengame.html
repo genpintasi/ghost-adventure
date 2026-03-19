@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>不給糖就搗蛋 - 台灣點心大考驗</title>
+    <style>
+        :root { 
+            --primary-orange: #ff9800; 
+            --bg-color: #1a1a1a;
+            --text-color: #ffffff;
+        }
+        body { 
+            font-family: "Microsoft JhengHei", -apple-system, sans-serif; 
+            background-color: var(--bg-color); 
+            color: var(--text-color); 
+            text-align: center; 
+            margin: 0;
+            padding: 10px;
+            touch-action: manipulation;
+        }
+
+        /* 1. 登入畫面樣式 */
+        #login-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #2c3e50, #000);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        #login-screen h1 { font-size: 2.2rem; color: var(--primary-orange); margin-bottom: 20px; }
+        .start-btn {
+            padding: 15px 50px; font-size: 1.5rem; background: var(--primary-orange);
+            color: white; border: none; border-radius: 50px; cursor: pointer;
+            box-shadow: 0 5px 15px rgba(255,152,0,0.4); font-weight: bold;
+        }
+
+        /* 2. 遊戲主畫面佈局 */
+        #game-ui { display: none; }
+        .game-container { 
+            display: grid; 
+            /* 預設在較大螢幕每行 8 張卡片，確保對齊 */
+            grid-template-columns: repeat(8, 1fr); 
+            gap: 8px; 
+            max-width: 900px; 
+            margin: 10px auto; 
+        }
+
+        /* 手機版調整：改為每行 4 張或 5 張，避免太擠 */
+        @media (max-width: 600px) {
+            .game-container { grid-template-columns: repeat(4, 1fr); }
+        }
+        
+        /* 卡片設計 */
+        .card { 
+            aspect-ratio: 3/4;
+            background-color: var(--primary-orange); 
+            cursor: pointer; 
+            position: relative; 
+            transform-style: preserve-3d; 
+            transition: transform 0.3s; 
+            border-radius: 6px; 
+        }
+        .card.flipped { transform: rotateY(180deg); }
+        
+        .card-front, .card-back { 
+            position: absolute; width: 100%; height: 100%; 
+            backface-visibility: hidden; 
+            display: flex; flex-direction: column; 
+            align-items: center; justify-content: center; 
+            border-radius: 6px; border: 1px solid #fff; 
+            box-sizing: border-box;
+        }
+        .card-front { font-size: 1.5rem; background-color: #ff9800; color: white; }
+        .card-back { 
+            background-color: #ffffff; color: #000;
+            transform: rotateY(180deg); padding: 2px;
+        }
+        .card-icon { font-size: 26px; }
+        .card-text { font-size: 9px; line-height: 1.1; font-weight: bold; margin-top: 2px; }
+
+        /* 狀態列 */
+        .status-bar { background: #333; padding: 10px; border-radius: 8px; margin-bottom: 10px; display: inline-block; width: 90%; max-width: 600px; }
+        #timer { font-size: 1.1rem; color: #ffeb3b; }
+        .ghost-box { font-size: 1.8rem; margin-top: 5px; }
+        .ghost { opacity: 0.1; filter: grayscale(100%); transition: opacity 0.3s; }
+        .ghost.active { opacity: 1; filter: grayscale(0%); }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h1>🎃 不給糖就搗蛋 🎃</h1>
+        <p style="color: #ccc; margin-bottom: 30px;">挑戰 20 種台灣傳統點心記憶</p>
+        <button class="start-btn" onclick="pressStart()" ontouchend="pressStart()">進入遊戲</button>
+    </div>
+
+    <div id="game-ui">
+        <div class="status-bar">
+            <div id="timer">準備時間：<span id="seconds">30</span> 秒</div>
+            <div class="ghost-box">
+                <span class="ghost">👻</span><span class="ghost">👻</span><span class="ghost">👻</span><span class="ghost">👻</span><span class="ghost">👻</span>
+            </div>
+        </div>
+        <div class="game-container" id="board"></div>
+    </div>
+
+    <script>
+        const candyData = [
+            { n: '糖仔', s: 'thn̂g-á', i: '🍬' }, { n: '牛奶糖', s: 'gû-nai', i: '🐄' },
+            { n: '軟糖', s: 'nńg-thn̂g', i: '🧸' }, { n: '巧克力', s: 'khá-lat', i: '🍫' },
+            { n: '枝仔糖', s: 'ki-á-thn̂g', i: '🍭' }, { n: '豆生糖', s: 'tāu-sing', i: '🥜' },
+            { n: '芝麻糖', s: 'tsi-mâ', i: '🥯' }, { n: '麥芽膏', s: 'be̍h-gâ', i: '🍯' },
+            { n: '雞膦糖', s: 'ke-lân', i: '🎈' }, { n: '足球巧克', s: 'tsiok-kiû', i: '⚽' },
+            { n: '餅乾', s: 'piánn-kan', i: '🍪' }, { n: '夾心餅', s: 'keh-sim', i: '🥪' },
+            { n: '梳打餅', s: 'soo-tá', i: '🧂' }, { n: '仙貝', s: 'siên-bei', i: '🍘' },
+            { n: '乖乖', s: 'kuai-kuai', i: '🍿' }, { n: '蝦味先', s: 'hê-bī', i: '🦐' },
+            { n: '菜脯餅', s: 'tshài-póo', i: '🥨' }, { n: '麻粩', s: 'muâ-láu', i: '🥖' },
+            { n: '寸棗', s: 'tshùn-tsó', i: '🎋' }, { n: '牛條餅', s: 'gû-tiâu', i: '🐮' }
+        ];
+
+        let gameCards = [...candyData, ...candyData].sort(() => Math.random() - 0.5);
+        let flipped = [], matched = 0, mistakes = 0, active = false;
+        const board = document.getElementById('board');
+        const ghosts = document.querySelectorAll('.ghost');
+
+        function pressStart() {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'block';
+            initGame();
+        }
+
+        function initGame() {
+            // 清空盤面重新生成
+            board.innerHTML = '';
+            gameCards.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'card flipped'; 
+                card.dataset.name = item.n;
+                card.innerHTML = `
+                    <div class="card-front">?</div>
+                    <div class="card-back">
+                        <div class="card-icon">${item.i}</div>
+                        <div class="card-text">${item.n}<br>${item.s}</div>
+                    </div>
+                `;
+                card.onclick = flip;
+                board.appendChild(card);
+            });
+            
+            let sec = 10;
+            const t = setInterval(() => {
+                sec--;
+                document.getElementById('seconds').innerText = sec;
+                if(sec <= 0) {
+                    clearInterval(t);
+                    document.querySelectorAll('.card').forEach(c => c.classList.remove('flipped'));
+                    active = true;
+                    document.getElementById('timer').innerText = "遊戲開始！";
+                }
+            }, 1000);
+        }
+
+        function flip() {
+            if (!active || this.classList.contains('flipped') || flipped.length === 2) return;
+            this.classList.add('flipped');
+            flipped.push(this);
+            if (flipped.length === 2) {
+                if (flipped[0].dataset.name === flipped[1].dataset.name) {
+                    matched += 2;
+                    flipped = [];
+                    if (matched === gameCards.length) setTimeout(() => alert('🎉 恭喜大獲全勝！'), 300);
+                } else {
+                    setTimeout(() => {
+                        flipped.forEach(c => c.classList.remove('flipped'));
+                        flipped = [];
+                        if(mistakes < 5) ghosts[mistakes++].classList.add('active');
+                        if(mistakes === 5) { alert('👻 失敗了，下次再加油！'); location.reload(); }
+                    }, 800);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
